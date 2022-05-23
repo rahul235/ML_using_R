@@ -1,0 +1,71 @@
+---
+title: "Manipal Hospital Model"
+author: "Kumar Rahul"
+date: "07 January 2017"
+output: word_document
+---
+## In this exercise, we will use the hospital survey dataset (7126 observations across 51 variables) and understand the following:
+
+> 1. Reading the csv file in R
+2. Creating data partition
+3. Applying knnImpute algorithm to impute the missing value
+4. Converting the standarized variables to orginal values
+
+***
+
+```{r, include=FALSE}
+library(caret)            #for split and model accuracy
+library(RANN)             #for KKNImpute
+```
+
+## Preparing data
+
+####Read data from a specified location
+```{r, echo=TRUE}
+raw.data <- read.csv("/Users/Rahul/Documents/Rahul Office/IIMB/Projects/Manipal Hospital/Combined_Data_Numeric_Score_4212017.csv",head=TRUE,na.strings=c("", " ","#N/A", "NA"), sep=",")
+```
+
+####Define an 70%/30% train/test split of the dataset
+```{r}
+set.seed(4121)
+trainIndex <- createDataPartition(raw.data$NPS_Status, p = 0.70, list=FALSE)
+data.train <- raw.data[ trainIndex,]
+data.test <- raw.data[-trainIndex,]
+#write.csv(na.omit(data.test),"Manipal_Hospital_TestSet_04232017.csv")
+```
+
+#Pre-Process for Imputation
+preprocessing with knnImpute silently removes any columns containing NA values. As a guideline, **K** should be square root of the number of complete cases.
+```{r}
+#data.train <- data.train[-1]
+preProcValues <- preProcess(data.train[,2:51], method = c("knnImpute"),
+                            k = 28,
+                            knnSummary = mean)
+impute.train <- predict(preProcValues, data.train,na.action = na.pass)
+
+#To get the original data
+AgeYrs <- impute.train$AgeYrs*preProcValues$std[1]+preProcValues$mean[1]
+
+Estimatedcost <- impute.train$Estimatedcost *preProcValues$std[2]+preProcValues$mean[2]
+
+LengthofStay <- impute.train$LengthofStay *preProcValues$std[38]+preProcValues$mean[38]
+
+CE_NPS <- impute.train$CE_NPS *preProcValues$std[39]+preProcValues$mean[39]
+
+survey.list <- lapply(12:46, function(x) ceiling(impute.train[x]*preProcValues$std[x-9]+preProcValues$mean[x-9]))
+imputed.data <- data.frame(data.train[,1:2],
+                           AgeYrs,
+                           data.train[,4:6],
+                           Estimatedcost,
+                           data.train[,8:11],
+                           survey.list,
+                           data.train[,47:48],
+                           LengthofStay,
+                           CE_NPS,
+                           data.train[51])
+#write.csv(imputed.data,"Manipal_Hospital_TrainingSet_04232017.csv")
+```
+
+End of document
+
+***

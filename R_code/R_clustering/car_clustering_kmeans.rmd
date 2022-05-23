@@ -1,0 +1,160 @@
+---
+title: "Kmeans Clustering"
+author: "Kumar Rahul"
+date: "23/05/2022"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+## K means Clustering
+
+More info at: https://uc-r.github.io/kmeans_clustering
+
+```{r echo=FALSE, message=FALSE}
+library(stats) # for kmeans  and hclust
+library(tidyverse)  # data manipulation
+library(cluster)    # clustering algorithms
+library(factoextra) # clustering visualization
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+#setwd("/Users/Rahul/Documents/Rahul Office/IIMB/Concepts/R/ML_using_R/R_code/R_clustering")
+knitr::opts_knit$set(root.dir = "/Users/Rahul/Documents/Rahul Office/IIMB/Concepts/R/ML_using_R/R_code/R_clustering")
+```
+
+## Preparing Data
+
+Read data from a specified location
+
+```{r}
+car_df = read.csv('./data/Kmeans_Car.csv',header = TRUE,sep = ",",
+                     na.strings = c(""," ", "NA"), row.names = c(2))
+```
+
+```{r}
+head(car_df)
+```
+
+## Summary of the data
+
+Summary of the data on which model is built and Standardizing the variables
+
+```{r}
+str(car_df)
+```
+
+```{r}
+car_df = na.omit(car_df)
+car_scaled = scale(car_df[,c(2:4)])
+```
+
+## Kmeans clustering - cluster package
+
+The kmeans function has an nstart option that attempts multiple initial configurations and reports on the best one. We are setting nstart = 10 and thus it will generate 10 initial configurations. This approach is often recommended.
+
+```{r}
+car_kmeans2 = kmeans(car_scaled, centers = 2, nstart = 10)
+```
+
+The output of kmeans is a list with several bits of information. The most important being:
+
+* cluster: A vector of integers (from 1:k) indicating the cluster to which each point is allocated.
+* centers: A matrix of cluster centers.
+* totss: The total sum of squares.
+* withinss: Vector of within-cluster sum of squares, one component per cluster.
+* tot.withinss: Total within-cluster sum of squares, i.e. sum(withinss).
+* betweenss: The between-cluster sum of squares, i.e. $totss-tot.withinss$.
+* size: The number of points in each cluster.
+
+```{r}
+options(repr.plot.width=15, repr.plot.height=10)
+```
+
+```{r}
+fviz_cluster(car_kmeans2, data = car_scaled) + 
+theme_bw()
+```
+
+## Clusters with different K
+
+Using centers as 3,4,5 and visulaizing the clusters.
+
+```{r}
+car_kmeans3 = kmeans(car_scaled, centers = 3, nstart = 10)
+car_kmeans4 = kmeans(car_scaled, centers = 4, nstart = 10)
+car_kmeans5 = kmeans(car_scaled, centers = 5, nstart = 10)
+
+# plots to compare
+p1 = fviz_cluster(car_kmeans2, geom = "point", data = car_scaled) + ggtitle("k = 2") + theme_bw()
+p2 = fviz_cluster(car_kmeans3, geom = "point",  data = car_scaled) + ggtitle("k = 3")+ theme_bw()
+p3 = fviz_cluster(car_kmeans4, geom = "point",  data = car_scaled) + ggtitle("k = 4")+ theme_bw()
+p4 = fviz_cluster(car_kmeans5, geom = "point",  data = car_scaled) + ggtitle("k = 5")+ theme_bw()
+
+library(gridExtra)
+grid.arrange(p1, p2, p3, p4, nrow = 2)
+```
+
+## Optimal cluster - Average Silhouette width
+
+Using average silhouette width as the metric, the optimal number of clusters k is the one that maximizes the average silhouette over a range of possible values for k.
+
+The results show that 2 clusters maximize the average silhouette values with 3 clusters coming in as second optimal number of clusters.
+
+```{r}
+fviz_nbclust(car_scaled, FUNcluster = kmeans,
+             method = "silhouette", k=15)
+```
+
+## Optimal Cluster - Elbow method (wss)
+
+The total within-cluster sum of square (wss) measures the compactness of the clustering and we want it to be as small as possible. The location of a bend (knee) in the plot is generally considered as an indicator of the appropriate number of clusters.
+
+Result shows k = 3 to be the optimal.
+
+```{r}
+fviz_nbclust(car_scaled, FUNcluster = kmeans, method = "wss", k=15)
+```
+
+In order to identify sub-groups (i.e. clusters), we will set k =3
+
+```{r}
+set.seed(123)
+car_kmeans_final = kmeans(car_scaled, 3, nstart = 10)
+#print(car_kmeans_final)
+```
+
+## Visualize final cluster
+
+We can visualize the cluster as below:
+
+```{r}
+fviz_cluster(car_kmeans_final, geom="point", data = car_scaled) +
+theme_bw()
+```
+
+The summary staistics of the 3 clsuters are as below:
+
+```{r}
+car_df[,c(2:4)] %>%
+  mutate(Cluster = car_kmeans_final$cluster) %>%
+  group_by(Cluster) %>%
+  summarise_all("mean")
+```
+
+The cluster can be tagged to the original dataframe as below:
+
+```{r}
+car_df %>%
+mutate(cluster = car_kmeans_final$cluster, name = row.names(car_df)) %>%
+head(10)
+```
+
+```{r}
+car_df %>%
+mutate(cluster = car_kmeans_final$cluster, name = row.names(car_df)) %>%
+write.csv("cars_kmeans_output.csv")
+```
+

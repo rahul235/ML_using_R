@@ -1,0 +1,170 @@
+---
+title: "Hierarchical Clustering"
+author: "Kumar Rahul"
+date: "23/05/2022"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+## Hirarchial Clustering
+
+More info at: https://uc-r.github.io/hc_clustering
+
+```{r echo=FALSE, message=FALSE}
+library(stats) # for kmeans  and hclust
+library(tidyverse)  # data manipulation
+library(cluster)    # clustering algorithms
+library(factoextra) # clustering visualization
+library(dendextend) # for comparing two dendrograms
+library(dplyr)
+library(ggplot2)
+#library(ggdendro)
+```
+
+```{r}
+#setwd("/Users/Rahul/Documents/Rahul Office/IIMB/Concepts/R/ML_using_R/R_code/R_clustering")
+knitr::opts_knit$set(root.dir = "/Users/Rahul/Documents/Rahul Office/IIMB/Concepts/R/ML_using_R/R_code/R_clustering")
+```
+
+## Preparing Data
+
+Read data from a specified location
+
+```{r}
+beer_df = read.csv('./data/Hclust_Beer.csv',header = TRUE,sep = ",",
+                     na.strings = c(""," ", "NA"), row.names = c(2))
+
+beer_df = beer_df[,-c(1)]
+```
+
+```{r}
+head(beer_df)
+```
+
+## Summary of the data
+
+Summary of the data on which model is built and Standardizing the variables
+
+```{r}
+str(beer_df)
+```
+
+```{r}
+beer_df = na.omit(beer_df)
+beer_scaled = scale(beer_df[,c(1:4)])
+```
+
+## Hirerchial clustering - agnes package
+
+Using euclidean as distance measure for hirerchial clustering. Note that if using hclust(), the dist matrix returned by dist() is used.
+
+```{r}
+#beer_dist = dist(beer_scaled, method = "euclidean") # distance matrix
+```
+
+With the agnes package we can also get the agglomerative coefficient, which measures the amount of clustering structure found (values closer to 1 suggest strong clustering structure)
+
+```{r}
+m = c( "average", "single", "complete", "ward")
+names(m) = c( "average", "single", "complete", "ward")
+
+# function to compute coefficient
+ac = function(x) {
+  agnes(beer_scaled, method = x)$ac
+}
+
+map_dbl(m, ac)
+```
+
+On this data set, Ward’s method identifies the strongest clustering structure of the four methods assessed. Thus applying ward method for further evaluation.
+
+
+## Dendrogram Plot
+
+Plot using dendrogram plot to visulaize the clusters. In the dendrogram, each leaf corresponds to one observation. As we move up the tree, observations that are similar to each other are combined into branches, which are themselves fused at a higher height.
+
+The height of the fusion, provided on the vertical axis, indicates the (dis)similarity between two observations. The higher the height of the fusion, the less similar the observations are. Note that, conclusions about the proximity of two observations can be drawn only based on the height where branches containing those two observations first are fused. We cannot use the proximity of two observations along the horizontal axis as a criteria of their similarity.
+
+https://stats.stackexchange.com/questions/109949/what-algorithm-does-ward-d-in-hclust-implement-if-it-is-not-wards-criterion
+
+Note that agnes(*, method="ward") corresponds to hclust(*, "ward.D2"). More at ?hclust.
+
+```{r}
+options(repr.plot.width=15, repr.plot.height=10)
+```
+
+```{r}
+beer_hclust1 = agnes(beer_scaled, method = "ward")
+pltree(beer_hclust1, cex = 1.2, hang = -1, main = "Dendrogram based on Ward Linkage") 
+```
+
+The height of the cut to the dendrogram controls the number of clusters obtained. It plays the same role as the k in k-means clustering. To identify the optimal k, we can use average silhoutee width or wss as metric. 
+
+## Optimal cluster - Average Silhouette width
+
+Using average silhouette width as the metric, the optimal number of clusters k is the one that maximizes the average silhouette over a range of possible values for k.
+
+The results show that 2 clusters maximize the average silhouette values with 3 clusters coming in as second optimal number of clusters.
+
+```{r}
+fviz_nbclust(beer_scaled, FUNcluster = hcut,hc_func = "agnes",hc_method = "ward.D2",hc_metric = "euclidean",
+             method = "silhouette", k=15)
+```
+
+## Optimal Cluster - Elbow method (wss)
+
+The total within-cluster sum of square (wss) measures the compactness of the clustering and we want it to be as small as possible. The location of a bend (knee) in the plot is generally considered as an indicator of the appropriate number of clusters.
+
+Result shows k = 3 to be the optimal.
+
+```{r}
+fviz_nbclust(beer_scaled, FUNcluster = hcut,hc_func = "agnes",hc_method = 
+             "ward.D2",hc_metric = "euclidean", method = "wss", k=15)
+```
+
+In order to identify sub-groups (i.e. clusters), we can cut the dendrogram with cutree. We will set k =3
+
+```{r}
+# Ward's method
+# beer_hclust = hclust(beer_dist, method = "ward.D2" )
+k = 3
+beer_hclust2 = as.hclust(agnes(beer_scaled, method = "ward"))
+#cutree((beer_hclust2), k = k)
+
+
+# Cut tree into 4 groups
+sub_grp = cutree(beer_hclust2, k = k)
+
+# Number of members in each cluster
+table(sub_grp)
+```
+
+## Visualize cluster
+
+We can visualize the cluster as below:
+
+```{r}
+plot(beer_hclust2, cex = 1.2)
+rect.hclust(beer_hclust2, border = 2:4,cluster = sub_grp, k=k)
+```
+
+```{r}
+fviz_cluster(list(data = beer_scaled, cluster = sub_grp)) +
+theme_bw()
+```
+
+The cluster can be tagged to the original dataframe as below:
+
+```{r}
+beer_df %>%
+mutate(cluster = sub_grp, name = row.names(beer_df)) %>%
+head(10)
+```
+
+```{r}
+beer_df %>%
+mutate(cluster = sub_grp, name = row.names(beer_df)) %>%
+write.csv("beer_hirarchial_output.csv")
+```
+
